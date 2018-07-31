@@ -2,62 +2,92 @@
 #set -e
 #. ./env.sh
 
-export ARCH=aarch64
+export ARCH=arm
 export RFS_WIFI_SSID=$WIFI_SSID
 export RFS_WIFI_PASSWORD=$WIFI_PASSWORD
 
-if [ -z "$DISTRO" ]; then
-  echo "Distro not set";
-  exit
-fi
+export TOP=$PWD
+export SYSROOT=$TOP/fs
+export TMP=$TOP/tmp
+OUT=$TOP/out
 
-if [ -z "$TOP" ]; then
-  echo "TOP not set"
-  exit
-fi
+if [[ -d "$SYSROOT" ]]; then
+	mkdir $SYSROOT;
+fi;
 
-if [ -z "$SYSROOT" ]; then
-  echo "SYSROOT not set";
-  exit
-fi
+if [[ -d "$TMP" ]]; then
+	mkdir$TMP;
+fi;
 
+if [[ -d "$OUT" ]]; then
+	mkdir$OUT;
+fi;
+
+function makeRootFS() {
 if [ ! -d "distros/$DISTRO" ]; then
-  echo "Distro \"$DISTRO\" not found!";
-  distros=$(ls distros)
-  echo "Distros available: $distros";
-  exit
+	echo "Distro \"$DISTRO\" not found!";
+	return;
 fi
 
-if [ ! -f "distros/$DISTRO/build.sh" ]; then
-  echo "distros/$DISTRO/build.sh not found!"
-  exit;
-fi
+	sudo chown -R $UID:$GID $SYSROOT
 
-if [ ! -d "$SYSROOT" ]; then
-  echo "SYSROOT directory not found!";
-  exit
-fi
+	distros/$DISTRO/build.sh
 
-sudo chown -R $UID:$GID $SYSROOT
+	if [ "$?" -ne "0" ]; then
+  		exit 1;
+	fi;
 
-distros/$DISTRO/build.sh
+	nvidia/apply_binaries.sh
 
-if [ "$?" -ne "0" ]; then
-  exit 1;
-fi 
+	# Chmod
+	sudo chown -R 0:0 $SYSROOT/
+	sudo chown -R 1000:1000 $SYSROOT/home/alarm
 
-# Chmod
-sudo chown -R 0:0 $SYSROOT/
-sudo chown -R 1000:1000 $SYSROOT/home/alarm
+	sudo chmod +s $SYSROOT/usr/bin/chfn
+	sudo chmod +s $SYSROOT/usr/bin/newgrp
+	sudo chmod +s $SYSROOT/usr/bin/passwd
+	sudo chmod +s $SYSROOT/usr/bin/chsh
+	sudo chmod +s $SYSROOT/usr/bin/gpasswd
+	sudo chmod +s $SYSROOT/bin/umount
+	sudo chmod +s $SYSROOT/bin/mount
+	sudo chmod +s $SYSROOT/bin/su
 
-sudo chmod +s $SYSROOT/usr/bin/chfn
-sudo chmod +s $SYSROOT/usr/bin/newgrp
-sudo chmod +s $SYSROOT/usr/bin/passwd
-sudo chmod +s $SYSROOT/usr/bin/chsh
-sudo chmod +s $SYSROOT/usr/bin/gpasswd
-sudo chmod +s $SYSROOT/bin/umount
-sudo chmod +s $SYSROOT/bin/mount
-sudo chmod +s $SYSROOT/bin/su
+	cd $SYSROOT
+	sudo tar -cpzf $OUT/${DISTRO}_rootfs.tar.gz .
+}
 
-cd $SYSROOT
-sudo tar -cpzf $TOP/out/${DISTRO}_rootfs.tar.gz .
+function clean() {
+	echo "$SYSROOT will be cleaned";
+	rm -r $SYSROOT/*
+}
+
+function main()
+{
+	clear
+	echo "---------------------------------------------------"
+	echo "Choose distro                                     -"
+	echo "---------------------------------------------------"
+	echo "1 - arch                                          -"
+	echo "---------------------------------------------------"
+	echo "2 - debian(not adapted yet)                       -"
+	echo "---------------------------------------------------"
+	echo "3 - ubuntu(not adapted yet)                       -"
+	echo "---------------------------------------------------"
+	echo "4 - clean                                         -"
+	echo "---------------------------------------------------"
+	echo "5 - exit                                          -"
+	echo "---------------------------------------------------"
+	printf %s "your choice: "
+	read env
+
+	case $env in
+		1) DISTRO="arch";makeRootFS;;
+		2) DISTRO="none";makeRootFS;;
+		3) DISTRO="none";makeRootFS;;
+		4) clean;;
+		5) clear;return;;
+		*) main;;
+	esac
+}
+
+main
